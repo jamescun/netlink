@@ -52,18 +52,18 @@ const (
 	UNUSED         Family = 1
 	USERSOCK       Family = 2
 	FIREWALL       Family = 3
-	SOCK_DIAG      Family = 4 //nolint
+	SOCK_DIAG      Family = 4
 	NFLOG          Family = 5
 	XFRM           Family = 6
 	SELINUX        Family = 7
 	ISCSI          Family = 8
 	AUDIT          Family = 9
-	FIB_LOOKUP     Family = 10 //nolint
+	FIB_LOOKUP     Family = 10
 	CONNECTOR      Family = 11
 	NETFILTER      Family = 12
-	IP6_FW         Family = 13 //nolint
+	IP6_FW         Family = 13
 	DNRTMSG        Family = 14
-	KOBJECT_UEVENT Family = 15 //nolint
+	KOBJECT_UEVENT Family = 15
 	GENERIC        Family = 16
 	SCSITRANSPORT  Family = 18
 	ECRYPTFS       Family = 19
@@ -141,8 +141,8 @@ const (
 	MULTI         Flags = 0x02
 	ACK           Flags = 0x04
 	ECHO          Flags = 0x08
-	DUMP_INTR     Flags = 0x10 //nolint
-	DUMP_FILTERED Flags = 0x20 //nolint
+	DUMP_INTR     Flags = 0x10
+	DUMP_FILTERED Flags = 0x20
 
 	// GET messages.
 	ROOT   Flags = 0x100
@@ -162,7 +162,7 @@ const (
 
 	// ACK messages.
 	CAPPED   Flags = 0x100
-	ACK_TLVS Flags = 0x200 //nolint
+	ACK_TLVS Flags = 0x200
 )
 
 // flagNames is bit shifted through by [Flags.String] to build a stringified
@@ -210,17 +210,17 @@ const (
 	S64          uint16 = 9
 	BINARY       uint16 = 10
 	STRING       uint16 = 11
-	NUL_STRING   uint16 = 12 //nolint
+	NUL_STRING   uint16 = 12
 	NESTED       uint16 = 13
-	NESTED_ARRAY uint16 = 14 //nolint
+	NESTED_ARRAY uint16 = 14
 	BITFIELD32   uint16 = 15
 	SINT         uint16 = 16
 	UINT         uint16 = 17
 
 	// Attribute type flags, not used by all families.
-	F_NESTED        uint16 = (1 << 15)                     //nolint
-	F_NET_BYTEORDER uint16 = (1 << 14)                     //nolint
-	F_TYPE_MASK     uint16 = ^(F_NESTED | F_NET_BYTEORDER) //nolint
+	F_NESTED        uint16 = (1 << 15)
+	F_NET_BYTEORDER uint16 = (1 << 14)
+	F_TYPE_MASK     uint16 = ^(F_NESTED | F_NET_BYTEORDER)
 )
 
 // Header is the fixed-length preamble before each Netlink message that

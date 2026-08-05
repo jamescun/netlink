@@ -48,6 +48,13 @@ linters:
     lll:
       line-length: 120
 
+    revive:
+      rules:
+      # many exported names match constants from other sources, such as the
+      # linux kernel.
+      - name: "var-naming"
+        disabled: true
+
     staticcheck:
       checks:
       # don't suggest tagged switches instead of ifs.
