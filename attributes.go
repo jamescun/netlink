@@ -7,6 +7,7 @@
 package netlink
 
 import (
+	"encoding"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -58,6 +59,34 @@ func (a Attribute) Bytes() []byte {
 // Multiple calls to Copy will yield the same bytes.
 func (a Attribute) Copy(dst []byte) int {
 	return copy(dst, a.buf)
+}
+
+// Int8 unmarshal the attribute as an int8.
+//
+// If not an int8, zero is returned.
+func (a Attribute) Int8() int8 {
+	return int8(a.Uint8()) //nolint
+}
+
+// Int16 unmarshal the attribute as an int16.
+//
+// If not an int16, zero is returned.
+func (a Attribute) Int16() int16 {
+	return int16(a.Uint16()) //nolint
+}
+
+// Int32 unmarshal the attribute as an int32.
+//
+// If not an int32, zero is returned.
+func (a Attribute) Int32() int32 {
+	return int32(a.Uint32()) //nolint
+}
+
+// Int64 unmarshal the attribute as an int64.
+//
+// If not an int64, zero is returned.
+func (a Attribute) Int64() int64 {
+	return int64(a.Uint64()) //nolint
 }
 
 // Nested returns an [AttributeReader] configured with the contents of this
@@ -159,6 +188,26 @@ func (a Attribute) Unmarshal(au AttributeUnmarshaler) error {
 	return nil
 }
 
+// UnmarshalBytes is called to read the raw contents of an attribute into a
+// type implementing [encoding.BinaryUnmarshaler]. It is the responsibility of
+// that implementation to handle decoding from the host byteorder.
+//
+// WARNING: the bytes given to [encoding.BinaryUnmarshaler] will be a slice of
+// of the message buffer, and is only valid for the duration of the message
+// being unmarshaled. Consider using [Attribute.Bytes] or [Attribute.Copy].
+func (a Attribute) UnmarshalBytes(dst encoding.BinaryUnmarshaler) error {
+	if dst == nil {
+		return fmt.Errorf("attribute %d: BinaryUnmarshaler is nil", a.t)
+	}
+
+	err := dst.UnmarshalBinary(a.buf)
+	if err != nil {
+		return fmt.Errorf("attribute %d: %w", a.t, err)
+	}
+
+	return nil
+}
+
 func (a *Attribute) unmarshal(b []byte) error {
 	if len(b) < attrHdrLen {
 		return fmt.Errorf("attribute: expected at least %d bytes, got %d", attrHdrLen, len(b))
@@ -197,8 +246,9 @@ func (fn AttributeUnmarshalerFunc) UnmarshalAttributes(attrs *AttributeReader) e
 	return fn(attrs)
 }
 
-// AttributeReader is used to iterate through the attributes received as part
-// of a Netlink message, using the host native byteorder.
+// AttributeReader is used to iterate through the Length-Tag-Value (LTV)
+// attributes received as part of a Netlink message, using the host native
+// byteorder.
 //
 // Intermediate family-specific headers should be read before progressing to
 // attribute handling.
@@ -304,8 +354,8 @@ func (fn AttributeMarshalerFunc) MarshalAttributes(attrs *AttributeWriter) error
 	return fn(attrs)
 }
 
-// AttributeWriter is used to build the attributes to be contained within a
-// Netlink message, using the host native byteorder.
+// AttributeWriter is used to build the Length-Tag-Value (LTV) attributes to be
+// contained within a Netlink message, using the host native byteorder.
 //
 // Intermediate family-specific headers should be written before progressing to
 // writing attributes.
@@ -323,7 +373,7 @@ func NewAttributeWriter(buf []byte) *AttributeWriter {
 	return &AttributeWriter{buf: buf}
 }
 
-// AddBytes appends bytes to the [AttributeWriter].
+// AddBytes appends bytes attribute to the [AttributeWriter].
 //
 // An error is returned if the length of the bytes, plus the length of the
 // attribute header, exceeds a [math.Uint16].
@@ -342,7 +392,37 @@ func (aw *AttributeWriter) AddBytes(attrType uint16, b []byte) error {
 	return nil
 }
 
-// AddString appends a null-terminated string to the [AttributeWriter].
+// AddInt8 appends an int8 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddInt8(attrType uint16, v int8) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 5)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = append(aw.buf, uint8(v), 0x00, 0x00, 0x00) //nolint
+}
+
+// AddInt16 appends an int16 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddInt16(attrType uint16, v int16) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 6)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, uint16(v)) //nolint
+	aw.buf = append(aw.buf, 0x00, 0x00)
+}
+
+// AddInt32 appends an int32 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddInt32(attrType uint16, v int32) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 8)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = binary.NativeEndian.AppendUint32(aw.buf, uint32(v)) //nolint
+}
+
+// AddInt64 appends an int64 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddInt64(attrType uint16, v int64) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 12)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = binary.NativeEndian.AppendUint64(aw.buf, uint64(v)) //nolint
+}
+
+// AddString appends a null-terminated string attribute to the
+// [AttributeWriter].
 //
 // An error is returned if the length of the string, plus the length of the
 // attribute header and null-terminator, exceeds a [math.Uint16].
@@ -360,6 +440,35 @@ func (aw *AttributeWriter) AddString(attrType uint16, s string) error {
 	aw.buf = Pad(aw.buf)
 
 	return nil
+}
+
+// AddUint8 appends a uint8 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddUint8(attrType uint16, v uint8) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 5)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = append(aw.buf, v, 0x00, 0x00, 0x00)
+}
+
+// AddUint16 appends a uint16 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddUint16(attrType uint16, v uint16) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 6)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, v)
+	aw.buf = append(aw.buf, 0x00, 0x00)
+}
+
+// AddUint32 appends a uint32 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddUint32(attrType uint16, v uint32) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 8)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = binary.NativeEndian.AppendUint32(aw.buf, v)
+}
+
+// AddUint64 appends a uint64 attribute to the [AttributeWriter].
+func (aw *AttributeWriter) AddUint64(attrType uint16, v uint64) {
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, 12)
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+	aw.buf = binary.NativeEndian.AppendUint64(aw.buf, v)
 }
 
 // Length returns the total number of bytes that have accumulated within the
