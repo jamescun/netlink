@@ -1,0 +1,380 @@
+// Copyright 2026 James Cunningham
+// SPDX-License-Identifier: BSD-3-Clause
+//
+// Use of this source code is governed by a BSD-style license that can be found
+// in the LICENSE file or at https://opensource.org/license/BSD-3-clause
+
+package netlink
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"math"
+)
+
+// Attribute contains an encoded Netlink attribute to be unmarshaled.
+type Attribute struct {
+	t   uint16
+	buf []byte
+}
+
+// Length returns the length of the attribute, including the attribute header,
+// in bytes, but excluding any alignment padding.
+func (a Attribute) Length() int {
+	return attrHdrLen + len(a.buf)
+}
+
+// Type returns the type of the attribute from the attribute header.
+func (a Attribute) Type() uint16 {
+	return a.t
+}
+
+// Array is an [iter.Seq] iterator that will yield an [AttributeReader] for
+// each nested array item in this attribute.
+func (a Attribute) Array(yield func(*AttributeReader) bool) {
+	attrs := &AttributeReader{
+		buf: a.buf,
+	}
+
+	for attr := range attrs.Each {
+		if !yield(&AttributeReader{buf: attr.buf}) {
+			break
+		}
+	}
+}
+
+// Bytes returns the contents of the attribute as bytes, excluding the
+// attribute header or any alignment bytes.
+func (a Attribute) Bytes() []byte {
+	b := make([]byte, len(a.buf))
+	copy(b, a.buf)
+	return b
+}
+
+// Copy the contents of the attributes bytes into dst, returning how many
+// bytes were copied.
+//
+// Multiple calls to Copy will yield the same bytes.
+func (a Attribute) Copy(dst []byte) int {
+	return copy(dst, a.buf)
+}
+
+// Nested returns an [AttributeReader] configured with the contents of this
+// attribute for handling nested attributes.
+//
+// You may also want to consider [Attribute.Unmarshal] for types that implement
+// the [AttributeUnmarshaler] interface.
+func (a Attribute) Nested() *AttributeReader {
+	return &AttributeReader{
+		buf: a.buf,
+	}
+}
+
+// String returns the contents of the attribute as a string, excluding the
+// null-terminator.
+//
+// If not a string, the string will contain gibberish.
+func (a Attribute) String() string {
+	if len(a.buf) == 0 {
+		return ""
+	}
+
+	buf := a.buf
+
+	// trim null terminator, if it has one, before casting to a string.
+	if buf[len(buf)-1] == 0x00 {
+		buf = buf[:len(buf)-1]
+	}
+
+	return string(buf)
+}
+
+// Uint8 unmarshal the attribute as a uint8.
+//
+// If not a uint8, zero is returned.
+func (a Attribute) Uint8() uint8 {
+	if len(a.buf) < 1 {
+		return 0
+	}
+
+	return a.buf[0]
+}
+
+// Uint16 unmarshal the attribute as a uint16.
+//
+// If not a uint16, zero is returned.
+func (a Attribute) Uint16() uint16 {
+	if len(a.buf) < 2 {
+		return 0
+	}
+
+	return binary.NativeEndian.Uint16(a.buf)
+}
+
+// Uint32 unmarshal the attribute as a uint32.
+//
+// If not a uint32, zero is returned.
+func (a Attribute) Uint32() uint32 {
+	if len(a.buf) < 4 {
+		return 0
+	}
+
+	return binary.NativeEndian.Uint32(a.buf)
+}
+
+// Uint64 unmarshal the attribute as a uint64.
+//
+// If not a uint64, zero is returned.
+func (a Attribute) Uint64() uint64 {
+	if len(a.buf) < 8 {
+		return 0
+	}
+
+	return binary.NativeEndian.Uint64(a.buf)
+}
+
+// Unmarshal is called to read nested attributes from this attribute using an
+// [AttributeUnmarshaler].
+//
+// You may also want to consider [Attribute.Nested] to iterate through the
+// the attributes, if [AttributeUnmarshaler] is not implemented.
+func (a Attribute) Unmarshal(au AttributeUnmarshaler) error {
+	if au == nil {
+		return fmt.Errorf("nested %d: AttributeUnmarshaler is nil", a.t)
+	}
+
+	attrs := &AttributeReader{
+		buf: a.buf,
+	}
+
+	err := au.UnmarshalAttributes(attrs)
+	if err != nil {
+		return fmt.Errorf("nested %d: %w", a.t, err)
+	}
+
+	// prevent copies of attributes buffer leaking outside the call.
+	attrs.buf = nil
+
+	return nil
+}
+
+func (a *Attribute) unmarshal(b []byte) error {
+	if len(b) < attrHdrLen {
+		return fmt.Errorf("attribute: expected at least %d bytes, got %d", attrHdrLen, len(b))
+	}
+
+	length := int(binary.NativeEndian.Uint16(b))
+	a.t = binary.NativeEndian.Uint16(b[2:])
+
+	if length < attrHdrLen {
+		// length does not include the header itself.
+		return fmt.Errorf("attribute %d: invalid length, expected at least %d bytes, got %d", a.t, attrHdrLen, length)
+	}
+
+	if len(b) < length {
+		// not enough bytes for attributed.
+		return fmt.Errorf("attribute %d: needed %d bytes, got %d", a.t, length, len(b))
+	}
+
+	a.buf = b[attrHdrLen:length]
+	return nil
+}
+
+// AttributeUnmarshaler is used to unmarshal the attributes or nested
+// attributes contained within a Netlink message.
+type AttributeUnmarshaler interface {
+	UnmarshalAttributes(*AttributeReader) error
+}
+
+// AttributeUnmarshalerFunc adapts a function implementing the same signature
+// as [AttributeUnmarshaler.UnmarshalAttributes] into an
+// [AttributeUnmarshaler].
+type AttributeUnmarshalerFunc func(*AttributeReader) error
+
+// UnmarshalAttributes calls fn(attrs).
+func (fn AttributeUnmarshalerFunc) UnmarshalAttributes(attrs *AttributeReader) error {
+	return fn(attrs)
+}
+
+// AttributeReader is used to iterate through the attributes received as part
+// of a Netlink message, using the host native byteorder.
+//
+// Intermediate family-specific headers should be read before progressing to
+// attribute handling.
+type AttributeReader struct {
+	buf []byte
+	err error
+}
+
+// NewAttributeReader initializes a new [AttributeReader] from bytes containing
+// the attributes to read, and optional intermediate family-specific headers
+// for [AttributeReader.Read].
+func NewAttributeReader(buf []byte) *AttributeReader {
+	return &AttributeReader{buf: buf}
+}
+
+// Err returns the last error encountered while reading attributes, if any.
+func (ar *AttributeReader) Err() error {
+	return ar.err
+}
+
+// Each is an [iter.Seq] iterator, that will yield for each [Attribute]
+// contained within the [AttributeReader], until finished or an error occurs.
+//
+// If an error occurs, it will be returned by [AttributeReader.Err].
+func (ar *AttributeReader) Each(yield func(Attribute) bool) {
+	if ar.err != nil {
+		// attributes reader invalidated by previous error.
+		return
+	}
+
+	for len(ar.buf) > attrHdrLen {
+		attr := Attribute{}
+		err := attr.unmarshal(ar.buf)
+		if err != nil {
+			ar.err = err
+			break
+		}
+
+		if !yield(attr) {
+			break
+		}
+
+		// progress the buffer for the next iteration, or end iteration.
+		ar.buf = ar.buf[Align(attr.Length()):]
+	}
+}
+
+// Length returns the total number of bytes contained within the
+// [AttributeReader] that haven't been read.
+func (ar *AttributeReader) Length() int {
+	return len(ar.buf)
+}
+
+// Read arbitrary bytes from the Netlink attributes body. This is used to
+// intercept intermediate family-specific headers before moving on to the
+// attributes that follow.
+//
+// The bytes read will not automatically be aligned to 4 bytes, consider using
+// [Align] to read the correct number of bytes.
+func (ar *AttributeReader) Read(b []byte) (int, error) {
+	if len(ar.buf) == 0 {
+		return 0, io.EOF
+	}
+
+	n := copy(b, ar.buf)
+	ar.buf = ar.buf[n:]
+
+	return n, nil
+}
+
+// Unmarshal is called on an [AttributeReader] to unmarshal it's attributes to
+// a type implementing the [AttributeUnmarshaler] interface.
+//
+// If it contains any intermediate family-specific headers, these must be read
+// first by calling [AttributeReader.Read].
+func (ar *AttributeReader) Unmarshal(au AttributeUnmarshaler) error {
+	if au == nil {
+		return fmt.Errorf("attributes: AttributeUnmarshaler is nil")
+	}
+
+	err := au.UnmarshalAttributes(ar)
+	if err != nil {
+		return fmt.Errorf("attributes: %w", err)
+	}
+
+	return nil
+}
+
+// AttributeMarshaler is used to marshal Netlink attributes or nested
+// attributes for a Netlink message.
+//
+// The total length of nested attributes cannot exceed a [math.Uint16].
+type AttributeMarshaler interface {
+	MarshalAttributes(*AttributeWriter) error
+}
+
+// AttributeMarshalerFunc adapts a function implementing the same signature as
+// [AttributeMarshaler.MarshalAttributes] into an [AttributeMarshaler].
+type AttributeMarshalerFunc func(*AttributeWriter) error
+
+// MarshalAttributes calls fn(attrs).
+func (fn AttributeMarshalerFunc) MarshalAttributes(attrs *AttributeWriter) error {
+	return fn(attrs)
+}
+
+// AttributeWriter is used to build the attributes to be contained within a
+// Netlink message, using the host native byteorder.
+//
+// Intermediate family-specific headers should be written before progressing to
+// writing attributes.
+type AttributeWriter struct {
+	buf []byte
+}
+
+// NewAttributeWriter initializes a new [AttributeWriter] for marshaling a
+// Netlink messages attributes, and optional intermediate family-specific
+// headers.
+//
+// It may be given a buffer which already contains data, and/or a pre-allocated
+// capacity which will be appended to.
+func NewAttributeWriter(buf []byte) *AttributeWriter {
+	return &AttributeWriter{buf: buf}
+}
+
+// AddBytes appends bytes to the [AttributeWriter].
+//
+// An error is returned if the length of the bytes, plus the length of the
+// attribute header, exceeds a [math.Uint16].
+func (aw *AttributeWriter) AddBytes(attrType uint16, b []byte) error {
+	length := attrHdrLen + len(b)
+	if length > math.MaxUint16 {
+		return fmt.Errorf("attribute: bytes exceeds uint16, got %d", length)
+	}
+
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, uint16(length))
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+
+	aw.buf = append(aw.buf, b...)
+	aw.buf = Pad(aw.buf)
+
+	return nil
+}
+
+// AddString appends a null-terminated string to the [AttributeWriter].
+//
+// An error is returned if the length of the string, plus the length of the
+// attribute header and null-terminator, exceeds a [math.Uint16].
+func (aw *AttributeWriter) AddString(attrType uint16, s string) error {
+	length := attrHdrLen + len(s) + 1
+	if length > math.MaxUint16 {
+		return fmt.Errorf("attribute: string exceeds uint16, got %d", length)
+	}
+
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, uint16(length))
+	aw.buf = binary.NativeEndian.AppendUint16(aw.buf, attrType)
+
+	aw.buf = append(aw.buf, s...)
+	aw.buf = append(aw.buf, 0x00)
+	aw.buf = Pad(aw.buf)
+
+	return nil
+}
+
+// Length returns the total number of bytes that have accumulated within the
+// [AttributeWriter].
+func (aw *AttributeWriter) Length() int {
+	return len(aw.buf)
+}
+
+// Write arbitrary bytes to the Netlink attributes body. This is used to
+// prepend intermediate family-specific headers before the attributes are
+// marshaled.
+//
+// The bytes written will nto automatically aligned to 4 bytes, consider using
+// [Pad] to write the correct number of bytes.
+func (aw *AttributeWriter) Write(b []byte) (int, error) {
+	aw.buf = append(aw.buf, b...)
+	return len(b), nil
+}
