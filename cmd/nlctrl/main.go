@@ -37,7 +37,7 @@ func main() {
 	fmt.Println("--   ----               -------   ----------------")
 
 	for _, family := range families {
-		fmt.Printf("%-4d %-18s %-9d", family.ID, family.Name, family.Version)
+		fmt.Printf("%-2d   %-16s   %-7d  ", family.ID, family.Name, family.Version)
 
 		for _, grp := range family.McastGroups {
 			fmt.Printf(" 0x%02d:%s", grp.ID, grp.Name)
