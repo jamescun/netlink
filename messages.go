@@ -7,8 +7,10 @@
 package netlink
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
+	"syscall"
 )
 
 // Message contains the header, optional intermediate family-specific header,
@@ -37,6 +39,50 @@ func (m *Message) AppendBinary(b []byte) ([]byte, error) {
 	b = Pad(b)
 
 	return b, nil
+}
+
+// Code returns the status code contained within [DONE] and [ERROR] messages.
+//
+// If not one of these message types, zero is returned.
+func (m *Message) Code() int {
+	if m.Type != DONE && m.Type != ERROR {
+		// does not contain nlmsgdone or nlmsgerr.
+		return 0
+	} else if len(m.buf) < 4 {
+		// cannot contain code.
+		return 0
+	}
+
+	code := int32(binary.NativeEndian.Uint32(m.buf)) //nolint
+
+	// encoded as a negative number, negate it to map to syscall errors.
+	return int(-code)
+}
+
+// Err unmarshals an [Error] from a Netlink error message, containing the error
+// code, header of original message, and optionally extended attributes.
+//
+// This will return nil if not a Netlink error message or is simply an
+// acknowledgement message when the [ACK] flag has been set.
+func (m *Message) Err() error {
+	if m.Type != ERROR {
+		// does not contain nlmsgerr.
+		return nil
+	} else if len(m.buf) < 20 {
+		// cannot contain nlmsgerr.
+		return nil
+	}
+
+	code := m.Code()
+
+	err := &Error{
+		Code:  code,
+		Inner: syscall.Errno(code),
+	}
+
+	err.Request.UnmarshalBinary(m.buf[4:]) //nolint
+
+	return err
 }
 
 // Marshal is called to marshal the Netlink message attributes from a type

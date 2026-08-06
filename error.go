@@ -7,39 +7,30 @@
 package netlink
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 )
 
-// Error is returned by a Netlink socket when an error occurs, containing at
-// least an error code, and the original Netlink header of the request.
+// Error is a Netlink error message received when a fault occurs, containing
+// the error code, header of original message, and optionally extended
+// attributes.
 type Error struct {
-	Code     uint32
-	Original Header
+	// Code is the error code received.
+	Code int
+
+	// Request contains the header of the original request message.
+	Request Header
+
+	// Inner contains the actual [syscall.Errno].
+	Inner error
 }
 
 func (e *Error) Error() string {
 	return fmt.Sprintf(
-		"netlink error: code: %d, type: %d, flags: %s, seq: %d, pid: %d",
-		e.Code, e.Original.Type, e.Original.Flags, e.Original.Seq, e.Original.Pid,
+		"netlink: code=%d seq=%d pid=%d: %s",
+		e.Code, e.Request.Seq, e.Request.Pid, e.Inner,
 	)
 }
 
-// UnmarshalAttributes unmarshals the body of a Netlink error.
-func (e *Error) UnmarshalAttributes(attrs *AttributeReader) error {
-	b := make([]byte, 4+hdrLen)
-	_, err := io.ReadFull(attrs, b)
-	if err != nil {
-		return fmt.Errorf("netlink error: %w", err)
-	}
-
-	e.Code = binary.NativeEndian.Uint32(b)
-
-	err = e.Original.UnmarshalBinary(b[4:])
-	if err != nil {
-		return fmt.Errorf("netlink error: %w", err)
-	}
-
-	return nil
+func (e *Error) Unwrap() error {
+	return e.Inner
 }

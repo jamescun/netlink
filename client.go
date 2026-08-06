@@ -64,11 +64,12 @@ type Client interface {
 	// Do executes a Netlink request, marshaling the request and unmarshaling
 	// the response(s) to dst.
 	//
-	// If the response contains multiple messages, dst should expect to handle
-	// multiple messages, until it receives the [DONE] message type.
+	// If the response contains multiple messages, dst will be unmarshaled to
+	// repeatedly until all messages have been consumed, not including the
+	// [DONE] message type.
 	//
-	// If an [ERROR] type message is received, it will be unmarshaled and
-	// returned as the [Error] type.
+	// On [ERROR] message types, the error will be unmarshaled automatically
+	// and returned as an [Error] type.
 	//
 	// The length, sequence number and port id will automatically be set.
 	Do(Marshaler, Unmarshaler) error
@@ -141,6 +142,9 @@ func (c *client) Do(src Marshaler, dst Unmarshaler) error {
 		return fmt.Errorf("client: marshal: %w", err)
 	}
 
+	// if ACK is set, poll [Conn.Read] until [DONE] or [ERROR].
+	ack := msg.Flags&ACK != 0
+
 	c.seq++
 
 	msg.Header.Seq = c.seq
@@ -159,29 +163,33 @@ func (c *client) Do(src Marshaler, dst Unmarshaler) error {
 	bufp, _ := c.pool.Get().(*[]byte)
 	defer c.pool.Put(bufp)
 
-	n, err := c.conn.Read(*bufp)
-	if err != nil {
-		return fmt.Errorf("client: read: %w", err)
-	}
+	for {
+		n, err := c.conn.Read(*bufp)
+		if err != nil {
+			return fmt.Errorf("client: read: %w", err)
+		}
 
-	mr := NewMessageReader((*bufp)[:n])
+		mr := NewMessageReader((*bufp)[:n])
 
-	for i, msg := range mr.Each {
-		if msg.Type == ERROR {
-			nlerr := &Error{}
-			err = msg.Unmarshal(nlerr)
-			if err == nil {
-				err = nlerr
+		for i, msg := range mr.Each {
+			if msg.Code() != 0 {
+				return msg.Err()
 			}
 
-			return err
+			if msg.Type == DONE || msg.Type == ERROR {
+				// no more messages to read.
+				return nil
+			}
+
+			err = dst.UnmarshalNetlink(msg)
+			if err != nil {
+				return fmt.Errorf("client: unmarshal: message %d: %w", i, err)
+			}
 		}
 
-		err = dst.UnmarshalNetlink(msg)
-		if err != nil {
-			return fmt.Errorf("client: unmarshal: message %d: %w", i, err)
+		if !ack {
+			// not expecting a DONE message.
+			return nil
 		}
 	}
-
-	return mr.Err()
 }
