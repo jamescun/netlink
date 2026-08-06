@@ -94,6 +94,10 @@ func Connect(family Family) (Client, error) {
 
 // NewClient initializes a [Client] around an already established [Conn], for
 // exchanging messages with request-response semantics.
+//
+// This may be useful for testing and development, such as using a [Dumper]
+// conn implementation, or otherwise intercept used to intercept reads and
+// writes.
 func NewClient(conn Conn) Client {
 	return &client{
 		conn: conn,
