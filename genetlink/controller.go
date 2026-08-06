@@ -68,7 +68,21 @@ func GetFamily(client netlink.Client, name string) (*Family, error) {
 func (c *Controller) GetFamily(name string) (*Family, error) {
 	f := &Family{}
 
-	err := c.client.Do(getFamily{name: name}, f)
+	err := c.client.Do(netlink.MarshalerFunc(func(msg *netlink.Message) error {
+		msg.Type = 0x10
+		msg.Flags = netlink.REQUEST | netlink.ACK
+
+		err := SetHeader(msg, 0x03, 0x01)
+		if err != nil {
+			return err
+		}
+
+		err = msg.Marshal(netlink.AttributeMarshalerFunc(func(aw *netlink.AttributeWriter) error {
+			return aw.AddString(unix.CTRL_ATTR_FAMILY_NAME, name)
+		}))
+
+		return err
+	}), f)
 	if _, ok := err.(*netlink.Error); ok {
 		return nil, ErrFamilyNotFound
 	} else if err != nil {
@@ -82,7 +96,17 @@ func (c *Controller) GetFamily(name string) (*Family, error) {
 func (c *Controller) ListFamilies() (Families, error) {
 	fs := Families{}
 
-	err := c.client.Do(getFamily{}, &fs)
+	err := c.client.Do(netlink.MarshalerFunc(func(msg *netlink.Message) error {
+		msg.Type = 0x10
+		msg.Flags = netlink.REQUEST | netlink.DUMP | netlink.ACK
+
+		err := SetHeader(msg, 0x03, 0x01)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}), &fs)
 	if err != nil {
 		return nil, err
 	}
@@ -194,42 +218,6 @@ func (mg *McastGroup) UnmarshalAttributes(attrs *netlink.AttributeReader) error 
 		case unix.CTRL_ATTR_MCAST_GRP_NAME:
 			mg.Name = attr.String()
 		}
-	}
-
-	return nil
-}
-
-type getFamily struct {
-	name string
-}
-
-func (gf getFamily) MarshalAttributes(attrs *netlink.AttributeWriter) error {
-	if gf.name != "" {
-		err := attrs.AddString(unix.CTRL_ATTR_FAMILY_NAME, gf.name)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (gf getFamily) MarshalNetlink(msg *netlink.Message) error {
-	msg.Type = 0x10
-	msg.Flags = netlink.REQUEST | netlink.ACK
-
-	if gf.name == "" {
-		msg.Flags |= netlink.DUMP
-	}
-
-	err := SetHeader(msg, 0x03, 0x01)
-	if err != nil {
-		return err
-	}
-
-	err = msg.Marshal(gf)
-	if err != nil {
-		return err
 	}
 
 	return nil
