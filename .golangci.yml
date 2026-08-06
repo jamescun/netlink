@@ -49,6 +49,7 @@ linters:
       line-length: 120
 
     revive:
+      enable-default-rules: true
       rules:
       # many exported names match constants from other sources, such as the
       # linux kernel.
