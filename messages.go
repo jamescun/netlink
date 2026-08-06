@@ -30,7 +30,7 @@ func (m *Message) AppendBinary(b []byte) ([]byte, error) {
 
 	b, err := m.Header.AppendBinary(b)
 	if err != nil {
-		return nil, fmt.Errorf("message: %w", err)
+		return nil, err
 	}
 
 	b = append(b, m.buf...)
@@ -46,7 +46,7 @@ func (m *Message) AppendBinary(b []byte) ([]byte, error) {
 // writing attributes.
 func (m *Message) Marshal(am AttributeMarshaler) error {
 	if am == nil {
-		return fmt.Errorf("message: attributes: received nil AttributeMarshaler")
+		return fmt.Errorf("attributes: received nil AttributeMarshaler")
 	}
 
 	attrs := &AttributeWriter{
@@ -55,7 +55,7 @@ func (m *Message) Marshal(am AttributeMarshaler) error {
 
 	err := am.MarshalAttributes(attrs)
 	if err != nil {
-		return fmt.Errorf("message: attributes: %w", err)
+		return fmt.Errorf("attributes: %w", err)
 	}
 
 	m.buf = attrs.buf
@@ -96,7 +96,7 @@ func (m *Message) Read(b []byte) (int, error) {
 // attribute handling.
 func (m *Message) Unmarshal(au AttributeUnmarshaler) error {
 	if au == nil {
-		return fmt.Errorf("message: attributes: received nil AttributeUnmarshaler")
+		return fmt.Errorf("attributes: received nil AttributeUnmarshaler")
 	}
 
 	attrs := &AttributeReader{
@@ -105,7 +105,7 @@ func (m *Message) Unmarshal(au AttributeUnmarshaler) error {
 
 	err := au.UnmarshalAttributes(attrs)
 	if err != nil {
-		return fmt.Errorf("message: attributes: %w", err)
+		return fmt.Errorf("attributes: %w", err)
 	}
 
 	return nil
@@ -114,15 +114,18 @@ func (m *Message) Unmarshal(au AttributeUnmarshaler) error {
 // UnmarshalBinary unmarshals a Netlink message from bytes, using the host
 // byteorder.
 //
+// The message will contain a slice of the original bytes, so message reading
+// must be completed before those bytes are reused.
+//
 // It will ignore any additional bytes it is given.
 func (m *Message) UnmarshalBinary(b []byte) error {
 	err := m.Header.UnmarshalBinary(b)
 	if err != nil {
-		return fmt.Errorf("message: %w", err)
+		return err
 	}
 
 	if len(b) < Align(m.Length) {
-		return fmt.Errorf("message: expected %d bytes, got %d", m.Length, len(b))
+		return fmt.Errorf("expected %d bytes, got %d", m.Length, len(b))
 	}
 
 	m.buf = b[hdrLen:m.Length]
@@ -139,4 +142,59 @@ func (m *Message) UnmarshalBinary(b []byte) error {
 func (m *Message) Write(b []byte) (int, error) {
 	m.buf = append(m.buf, b...)
 	return len(b), nil
+}
+
+// MessageReader is used to iterate through one-or-more encoded Netlink
+// messages from bytes, using the host native byteorder.
+type MessageReader struct {
+	buf []byte
+	err error
+}
+
+// NewMessageReader initializes a new [MessageReader] from bytes containing
+// one-or-more messages to read.
+func NewMessageReader(buf []byte) *MessageReader {
+	return &MessageReader{
+		buf: buf,
+	}
+}
+
+// Err returns the last error encountered while reading messages, if any.
+func (mr *MessageReader) Err() error {
+	return mr.err
+}
+
+// Each is an [iter.Seq2] iterator, that will yield for each [Message]
+// contained for the bytes given to [MessageReader], and well as the logical
+// message number.
+//
+// Each message will contain a slice of the original bytes, so message reading
+// must be completed before those bytes are reused.
+//
+// If an error occurs, it will be returned by [MessageReader.Err].
+func (mr *MessageReader) Each(yield func(int, *Message) bool) {
+	if mr.err != nil {
+		// message reader invalidated by previous error.
+		return
+	}
+
+	// work on our own slice of bytes, to support multiple iterations.
+	buf := mr.buf
+
+	i := 0
+	for len(buf) > hdrLen {
+		msg := &Message{}
+		err := msg.UnmarshalBinary(buf)
+		if err != nil {
+			mr.err = fmt.Errorf("message %d: %w", i, err)
+			break
+		}
+
+		if !yield(i, msg) {
+			break
+		}
+
+		i++
+		buf = buf[Align(msg.Length):]
+	}
 }

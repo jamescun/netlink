@@ -159,22 +159,14 @@ func (c *client) Do(src Marshaler, dst Unmarshaler) error {
 	bufp, _ := c.pool.Get().(*[]byte)
 	defer c.pool.Put(bufp)
 
-	buf = *bufp
-
-	n, err := c.conn.Read(buf)
+	n, err := c.conn.Read(*bufp)
 	if err != nil {
 		return fmt.Errorf("client: read: %w", err)
 	}
 
-	buf = buf[:n]
+	mr := NewMessageReader((*bufp)[:n])
 
-	for len(buf) > hdrLen {
-		msg := &Message{}
-		err := msg.UnmarshalBinary(buf)
-		if err != nil {
-			return fmt.Errorf("client: unmarshal: %w", err)
-		}
-
+	for i, msg := range mr.Each {
 		if msg.Type == ERROR {
 			nlerr := &Error{}
 			err = msg.Unmarshal(nlerr)
@@ -187,11 +179,9 @@ func (c *client) Do(src Marshaler, dst Unmarshaler) error {
 
 		err = dst.UnmarshalNetlink(msg)
 		if err != nil {
-			return fmt.Errorf("client: unmarshal: %w", err)
+			return fmt.Errorf("client: unmarshal: message %d: %w", i, err)
 		}
-
-		buf = buf[Align(msg.Length):]
 	}
 
-	return nil
+	return mr.Err()
 }
