@@ -4,6 +4,10 @@
 
 This package contains implements the Linux Kernel Netlink protocol, for interacting with the systems network stack and related subsystems.
 
+> [!WARNING]
+> This package is still under heavy **development**, it's API may change unprompted, or may behave in unexpected or destructive ways.
+>
+> **USE AT YOUR OWN RISK!**
 
 ## core packages
 
@@ -33,13 +37,15 @@ It also implements a client for the Generic Netlink [Controller](https://pkg.go.
 
 ## additional packages
 
-### rtnetlink
+### route
 
-[![Go Reference](https://pkg.go.dev/badge/go.jamescun.com/netlink/rtnetlink.svg)](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink)
+[![Go Reference](https://pkg.go.dev/badge/go.jamescun.com/netlink/route.svg)](https://pkg.go.dev/go.jamescun.com/netlink/route)
 
 ```sh
-go get -u go.jamescun.com/netlink/rtnetlink
+go get -u go.jamescun.com/netlink/route
 ```
+
+The `route` package is an implementation of the `rtnetlink` family, for interacting with system network interfaces, addresses and routing.
 
 
 ### wireguard
