@@ -31,15 +31,15 @@ func (a Attribute) Type() uint16 {
 	return a.t
 }
 
-// Array is an [iter.Seq] iterator that will yield an [AttributeReader] for
-// each nested array item in this attribute.
-func (a Attribute) Array(yield func(*AttributeReader) bool) {
+// Array is an [iter.Seq] iterator that will yield an [Attribute] for each
+// array item in this attribute.
+func (a Attribute) Array(yield func(Attribute) bool) {
 	attrs := &AttributeReader{
 		buf: a.buf,
 	}
 
 	for attr := range attrs.Each {
-		if !yield(&AttributeReader{buf: attr.buf}) {
+		if !yield(Attribute{t: attr.t, buf: attr.buf}) {
 			break
 		}
 	}
@@ -97,6 +97,20 @@ func (a Attribute) Int64() int64 {
 func (a Attribute) Nested() *AttributeReader {
 	return &AttributeReader{
 		buf: a.buf,
+	}
+}
+
+// NestedArray is an [iter.Seq] iterator that will yield an [AttributeReader]
+// for each nested array item in this attribute.
+func (a Attribute) NestedArray(yield func(*AttributeReader) bool) {
+	attrs := &AttributeReader{
+		buf: a.buf,
+	}
+
+	for attr := range attrs.Each {
+		if !yield(&AttributeReader{buf: attr.buf}) {
+			break
+		}
 	}
 }
 

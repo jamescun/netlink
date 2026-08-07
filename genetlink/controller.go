@@ -143,7 +143,7 @@ func (f *Family) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
 			f.MaxAttr = attr.Uint32()
 
 		case unix.CTRL_ATTR_MCAST_GROUPS:
-			for nested := range attr.Array {
+			for nested := range attr.NestedArray {
 				mg := McastGroup{}
 
 				err := mg.UnmarshalAttributes(nested)
