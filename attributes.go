@@ -253,6 +253,7 @@ func (fn AttributeUnmarshalerFunc) UnmarshalAttributes(attrs *AttributeReader) e
 // Intermediate family-specific headers should be read before progressing to
 // attribute handling.
 type AttributeReader struct {
+	i   int
 	buf []byte
 	err error
 }
@@ -279,9 +280,12 @@ func (ar *AttributeReader) Each(yield func(Attribute) bool) {
 		return
 	}
 
-	for len(ar.buf) > attrHdrLen {
+	// work on our own slice of the buffer to support multiple iterations.
+	buf := ar.buf[ar.i:]
+
+	for len(buf) > attrHdrLen {
 		attr := Attribute{}
-		err := attr.unmarshal(ar.buf)
+		err := attr.unmarshal(buf)
 		if err != nil {
 			ar.err = err
 			break
@@ -292,7 +296,7 @@ func (ar *AttributeReader) Each(yield func(Attribute) bool) {
 		}
 
 		// progress the buffer for the next iteration, or end iteration.
-		ar.buf = ar.buf[Align(attr.Length()):]
+		buf = buf[Align(attr.Length()):]
 	}
 }
 
@@ -309,12 +313,12 @@ func (ar *AttributeReader) Length() int {
 // The bytes read will not automatically be aligned to 4 bytes, consider using
 // [Align] to read the correct number of bytes.
 func (ar *AttributeReader) Read(b []byte) (int, error) {
-	if len(ar.buf) == 0 {
+	if ar.i >= len(ar.buf) {
 		return 0, io.EOF
 	}
 
-	n := copy(b, ar.buf)
-	ar.buf = ar.buf[n:]
+	n := copy(b, ar.buf[ar.i:])
+	ar.i += n
 
 	return n, nil
 }

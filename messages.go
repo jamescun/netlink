@@ -18,6 +18,7 @@ import (
 type Message struct {
 	Header
 
+	i   int // for reading only.
 	buf []byte
 }
 
@@ -125,12 +126,12 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 // The bytes read will not automatically be aligned to 4 bytes, consider using
 // [Align] to read the correct number of bytes.
 func (m *Message) Read(b []byte) (int, error) {
-	if len(m.buf) == 0 {
+	if m.i >= len(m.buf) {
 		return 0, io.EOF
 	}
 
-	n := copy(b, m.buf)
-	m.buf = m.buf[n:]
+	n := copy(b, m.buf[m.i:])
+	m.i += n
 
 	return n, nil
 }
@@ -146,7 +147,7 @@ func (m *Message) Unmarshal(au AttributeUnmarshaler) error {
 	}
 
 	attrs := &AttributeReader{
-		buf: m.buf,
+		buf: m.buf[m.i:],
 	}
 
 	err := au.UnmarshalAttributes(attrs)
