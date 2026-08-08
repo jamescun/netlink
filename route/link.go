@@ -47,7 +47,7 @@ type Link struct {
 	Weight           uint32
 	OperState        LinkOperState
 	Mode             LinkMode
-	Info             *LinkInfo
+	Info             LinkInfo
 	NetNsPid         uint32
 	Alias            string
 	NumVf            uint32
@@ -159,8 +159,7 @@ func (l *Link) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
 		case unix.IFLA_LINKMODE:
 			l.Mode = LinkMode(attr.Uint8())
 		case unix.IFLA_LINKINFO:
-			l.Info = new(LinkInfo)
-			err := attr.Unmarshal(l.Info)
+			err := attr.Unmarshal(&l.Info)
 			if err != nil {
 				return err
 			}
@@ -247,6 +246,12 @@ func (l *Link) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
 		case unix.IFLA_GRO_IPV4_MAX_SIZE:
 			l.GroIpv4MaxSize = attr.Uint32()
 		}
+	}
+
+	// ensure link info is always set, even when a physical or intrinsic link
+	// with no driver kind to reference.
+	if l.Info.Kind == "" {
+		l.Info.Kind = "device"
 	}
 
 	return nil
