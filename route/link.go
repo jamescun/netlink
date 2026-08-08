@@ -10,7 +10,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
+	"time"
 
 	"go.jamescun.com/netlink"
 
@@ -51,6 +53,7 @@ type Link struct {
 	NetNsPid         uint32
 	Alias            string
 	NumVf            uint32
+	Spec             *LinkSpec
 	Group            uint32
 	NetNsFd          uint32
 	ExtMask          uint32
@@ -112,7 +115,7 @@ func (l *Link) UnmarshalNetlink(msg *netlink.Message) error {
 // UnmarshalAttributes unmarshals the Netlink message attributes containing a
 // [Link].
 //
-// The [IfInfomsg] header must already have been read.
+// The [unix.IfInfomsg] header must already have been read.
 func (l *Link) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
 	for attr := range attrs.Each {
 		switch attr.Type() {
@@ -169,6 +172,12 @@ func (l *Link) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
 			l.Alias = attr.String()
 		case unix.IFLA_NUM_VF:
 			l.NumVf = attr.Uint32()
+		case unix.IFLA_AF_SPEC:
+			l.Spec = new(LinkSpec)
+			err := attr.Unmarshal(l.Spec)
+			if err != nil {
+				return err
+			}
 		case unix.IFLA_GROUP:
 			l.Group = attr.Uint32()
 		case unix.IFLA_NET_NS_FD:
@@ -284,6 +293,30 @@ type LinkDriver interface {
 	// DriverName returns the name of the Linux driver that manages the link
 	// device.
 	DriverName() string
+}
+
+// LinkAcceptRa configures if a [Link] accepts router advertisements.
+type LinkAcceptRa uint32
+
+// Constants for [LinkAcceptRa].
+const (
+	LinkAcceptRaNone LinkAcceptRa = iota
+	LinkAcceptRaAccept
+	LinkAcceptRaOverrule
+)
+
+func (l LinkAcceptRa) String() string {
+	switch l {
+	case LinkAcceptRaNone:
+		return "NONE"
+	case LinkAcceptRaAccept:
+		return "ACCEPT"
+	case LinkAcceptRaOverrule:
+		return "OVERRULE"
+
+	default:
+		return "UNKNOWN"
+	}
 }
 
 // LinkFilter is used for filtering the attributes within [LinkAttrs].
@@ -407,6 +440,36 @@ func (lf LinkFlags) String() string {
 	return ""
 }
 
+// LinkForceIgmpVersion configures IGMP version acceptance for a [Link].
+//
+// References:
+//   - https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html
+type LinkForceIgmpVersion uint32
+
+// Constants for [LinkForceIgmpVersion].
+const (
+	LinkForceIgmpVersionNone LinkForceIgmpVersion = iota
+	LinkForceIgmpVersion1
+	LinkForceIgmpVersion2
+	LinkForceIgmpVersion3
+)
+
+func (l LinkForceIgmpVersion) String() string {
+	switch l {
+	case LinkForceIgmpVersionNone:
+		return "NONE"
+	case LinkForceIgmpVersion1:
+		return "IGMPv1"
+	case LinkForceIgmpVersion2:
+		return "IGMPv2"
+	case LinkForceIgmpVersion3:
+		return "IGMPv3"
+
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // LinkIfMap contains information about memory and device configuration.
 //
 // References:
@@ -434,6 +497,313 @@ func (l *LinkIfMap) UnmarshalBinary(b []byte) error {
 	l.IRQ = binary.NativeEndian.Uint16(b[24:])
 	l.DMA = b[26]
 	l.Port = b[27]
+
+	return nil
+}
+
+// LinkInet contains the IPv4-specific configuration of a [Link].
+//
+// References:
+//   - linux/net/ipv4/devinet.c
+//   - https://www.kernel.org/doc/html/next/networking/netlink_spec/rt-link.html#rt-link-attribute-set-ifla-attrs
+type LinkInet struct {
+	Config LinkInetConfig
+}
+
+// UnmarshalAttributes unmarshals a [LinkInet] from the AF_INET attribute
+// on a [LinkSpec].
+func (l *LinkInet) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
+	for attr := range attrs.Each {
+		if attr.Type() == unix.IFLA_INET_CONF {
+			err := attr.UnmarshalBytes(&l.Config)
+			if err != nil {
+				return fmt.Errorf("config: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// LinkInetConfig contains the [LinkInet] configuration for a [Link], also
+// found within sysctl.
+//
+// References:
+//   - linux/net/ipv4/devinet.c
+//   - https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html
+type LinkInetConfig struct {
+	Forwarding         bool
+	McForwarding       bool
+	ProxyArp           bool
+	AcceptRedirects    bool
+	SecureRedirects    bool
+	SendRedirects      bool
+	SharedMedia        bool
+	RpFilter           LinkRpFilter
+	AcceptSourceRoute  bool
+	BootpRelay         bool
+	LogMartians        bool
+	Tag                uint32
+	ArpFilter          bool
+	MediumId           int32
+	NoXfrm             bool
+	NoPolicy           bool
+	ForceIgmpVersion   LinkForceIgmpVersion
+	ArpAnnounce        uint32
+	ArpIgnore          uint32
+	PromoteSecondaries bool
+	ArpAccept          uint32
+	ArpNotify          bool
+	AcceptLocal        bool
+	SrcVmark           bool
+	ProxyArpPvlan      bool
+	RouteLocalnet      bool
+}
+
+// UnmarshalBinary unmarshals the [LinkInetConfiguration] from bytes.
+//
+// It will ignore any additional bytes it is given.
+func (l *LinkInetConfig) UnmarshalBinary(b []byte) error {
+	if len(b) < 104 {
+		return fmt.Errorf("expected at least 104 bytes, got %d", len(b))
+	}
+
+	l.Forwarding = uint32bool(b)
+	l.McForwarding = uint32bool(b[4:])
+	l.ProxyArp = uint32bool(b[8:])
+	l.AcceptRedirects = uint32bool(b[12:])
+	l.SecureRedirects = uint32bool(b[16:])
+	l.SendRedirects = uint32bool(b[20:])
+	l.SharedMedia = uint32bool(b[24:])
+	l.RpFilter = LinkRpFilter(binary.NativeEndian.Uint32(b[28:]))
+	l.AcceptSourceRoute = uint32bool(b[32:])
+	l.BootpRelay = uint32bool(b[36:])
+	l.LogMartians = uint32bool(b[40:])
+	l.Tag = binary.NativeEndian.Uint32(b[44:])
+	l.ArpFilter = uint32bool(b[48:])
+	l.MediumId = int32(binary.NativeEndian.Uint32(b[52:])) //nolint
+	l.NoXfrm = uint32bool(b[56:])
+	l.NoPolicy = uint32bool(b[60:])
+	l.ForceIgmpVersion = LinkForceIgmpVersion(binary.NativeEndian.Uint32(b[64:]))
+	l.ArpAnnounce = binary.NativeEndian.Uint32(b[68:])
+	l.ArpIgnore = binary.NativeEndian.Uint32(b[72:])
+	l.PromoteSecondaries = uint32bool(b[76:])
+	l.ArpAccept = binary.NativeEndian.Uint32(b[80:])
+	l.ArpNotify = uint32bool(b[84:])
+	l.AcceptLocal = uint32bool(b[88:])
+	l.SrcVmark = uint32bool(b[92:])
+	l.ProxyArpPvlan = uint32bool(b[96:])
+	l.RouteLocalnet = uint32bool(b[100:])
+
+	return nil
+}
+
+// LinkInet6 contains the IPv6-specific configuration of a [Link].
+//
+// References:
+//   - linux/net/ipv6/addrconf.c
+//   - https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html
+type LinkInet6 struct {
+	Flags       LinkFlags
+	Config      LinkInet6Config
+	CacheInfo   LinkInet6CacheInfo
+	Token       netip.Addr
+	AddrGenMode uint8
+	RaMTU       uint32
+}
+
+// UnmarshalAttributes unmarshals a [LinkInet6] from the AF_INET6 attribute
+// on a [LinkSpec].
+func (l *LinkInet6) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
+	for attr := range attrs.Each {
+		switch attr.Type() {
+		case unix.IFLA_INET6_FLAGS:
+			l.Flags = LinkFlags(attr.Uint32())
+		case unix.IFLA_INET6_CONF:
+			err := attr.UnmarshalBytes(&l.Config)
+			if err != nil {
+				return fmt.Errorf("config: %w", err)
+			}
+		case unix.IFLA_INET6_CACHEINFO:
+			err := attr.UnmarshalBytes(&l.CacheInfo)
+			if err != nil {
+				return fmt.Errorf("cache-info: %w", err)
+			}
+		case unix.IFLA_INET6_TOKEN:
+			ip, ok := netip.AddrFromSlice(attr.Bytes())
+			if ok {
+				l.Token = ip
+			}
+		case unix.IFLA_INET6_ADDR_GEN_MODE:
+			l.AddrGenMode = attr.Uint8()
+		case unix.IFLA_INET6_RA_MTU:
+			l.RaMTU = attr.Uint32()
+		}
+	}
+
+	return nil
+}
+
+// LinkInet6Config contains the [LinkInet6] configuration for a [Link], also
+// found within sysctl.
+//
+// References:
+//   - linux/net/ipv6/addrconf.c
+//   - https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html
+type LinkInet6Config struct {
+	Forwarding                     bool
+	HopLimit                       uint32
+	Mtu                            uint32
+	AcceptRa                       LinkAcceptRa
+	AcceptRedirects                bool
+	AutoConf                       bool
+	DadTransmits                   uint32
+	RtrSolicits                    uint32
+	RtrSolicitInterval             time.Duration
+	RtrSolicitMaxInterval          time.Duration
+	RtrSolicitDelay                time.Duration
+	ForceMldVersion                uint32
+	Mldv1UnsolicitedReportInterval time.Duration
+	Mldv2UnsolicitedReportInterval time.Duration
+	UseTempAddr                    uint32
+	TempValidLft                   uint32
+	TempPreferedLft                uint32
+	RegenMaxRetry                  uint32
+	MaxDesyncFactor                uint32
+	MaxAddresses                   uint32
+	AcceptRaDefrtr                 bool
+	RaDefrtrMetric                 uint32
+	AcceptRaMinHopLimit            uint32
+	AcceptRaPinfo                  bool
+	AcceptRaRtrPref                bool
+	RtrProbeInterval               uint32
+	AcceptRaRtInfoMinPlen          uint32
+	AcceptRaRtInfoMaxPlen          uint32
+	ProxyNdp                       bool
+	AcceptSourceRoute              uint32
+	OptimisticDad                  bool
+	UseOptimistic                  bool
+	McForwarding                   uint32
+	DisableIPv6                    bool
+	AcceptDad                      bool
+	ForceTllao                     bool
+	NdiscNotify                    bool
+	SuppressFragNdisc              uint32
+	AcceptRaFromLocal              bool
+	AcceptRaMtu                    bool
+	IgnoreRoutesWithLinkdown       uint32
+	UseOifAddrsOnly                bool
+	DropUnicastInL2Multicast       bool
+	DropUnsolicitedNa              bool
+	KeepAddrOnDown                 uint32
+	Seg6Enabled                    uint32
+	Seg6RequireHmac                uint32
+	EnhancedDad                    bool
+	AddrGenMode                    uint32
+	DisablePolicy                  bool
+	NdiscTclass                    uint32
+	RplSegEnabled                  uint32
+	Ioam6Enabled                   uint32
+	Ioam6Id                        uint32
+	Ioam6IdWide                    uint32
+	NdiscEvictNoCarrier            bool
+	AcceptUntrackedNa              uint32
+	AcceptRaMinLft                 uint32
+	ForceForwarding                bool
+}
+
+// UnmarshalBinary unmarshals [LinkInet6Config] from bytes.
+//
+// It will ignore any additional bytes it is given.
+func (l *LinkInet6Config) UnmarshalBinary(b []byte) error {
+	if len(b) < 236 {
+		return fmt.Errorf("expected at least 236 bytes, got %d", len(b))
+	}
+
+	l.Forwarding = uint32bool(b)
+	l.HopLimit = binary.NativeEndian.Uint32(b[4:])
+	l.Mtu = binary.NativeEndian.Uint32(b[8:])
+	l.AcceptRa = LinkAcceptRa(binary.NativeEndian.Uint32(b[12:]))
+	l.AcceptRedirects = uint32bool(b[16:])
+	l.AutoConf = uint32bool(b[20:])
+	l.DadTransmits = binary.NativeEndian.Uint32(b[24:])
+	l.RtrSolicits = binary.NativeEndian.Uint32(b[28:])
+	l.RtrSolicitInterval = time.Duration(binary.NativeEndian.Uint32(b[32:])) * time.Second
+	l.RtrSolicitMaxInterval = time.Duration(binary.NativeEndian.Uint32(b[36:])) * time.Second
+	l.RtrSolicitDelay = time.Duration(binary.NativeEndian.Uint32(b[40:])) * time.Second
+	l.ForceMldVersion = binary.NativeEndian.Uint32(b[44:])
+	l.Mldv1UnsolicitedReportInterval = time.Duration(binary.NativeEndian.Uint32(b[48:])) * time.Millisecond
+	l.Mldv2UnsolicitedReportInterval = time.Duration(binary.NativeEndian.Uint32(b[52:])) * time.Millisecond
+	l.UseTempAddr = binary.NativeEndian.Uint32(b[56:])
+	l.TempValidLft = binary.NativeEndian.Uint32(b[60:])
+	l.TempPreferedLft = binary.NativeEndian.Uint32(b[64:])
+	l.RegenMaxRetry = binary.NativeEndian.Uint32(b[68:])
+	l.MaxDesyncFactor = binary.NativeEndian.Uint32(b[72:])
+	l.MaxAddresses = binary.NativeEndian.Uint32(b[76:])
+	l.AcceptRaDefrtr = uint32bool(b[80:])
+	l.RaDefrtrMetric = binary.NativeEndian.Uint32(b[84:])
+	l.AcceptRaMinHopLimit = binary.NativeEndian.Uint32(b[88:])
+	l.AcceptRaPinfo = uint32bool(b[92:])
+	l.AcceptRaRtrPref = uint32bool(b[96:])
+	l.RtrProbeInterval = binary.NativeEndian.Uint32(b[100:])
+	l.AcceptRaRtInfoMinPlen = binary.NativeEndian.Uint32(b[104:])
+	l.AcceptRaRtInfoMaxPlen = binary.NativeEndian.Uint32(b[108:])
+	l.ProxyNdp = uint32bool(b[112:])
+	l.AcceptSourceRoute = binary.NativeEndian.Uint32(b[116:])
+	l.OptimisticDad = uint32bool(b[120:])
+	l.UseOptimistic = uint32bool(b[124:])
+	l.McForwarding = binary.NativeEndian.Uint32(b[128:])
+	l.DisableIPv6 = uint32bool(b[132:])
+	l.AcceptDad = uint32bool(b[136:])
+	l.ForceTllao = uint32bool(b[140:])
+	l.NdiscNotify = uint32bool(b[144:])
+	l.SuppressFragNdisc = binary.NativeEndian.Uint32(b[148:])
+	l.AcceptRaFromLocal = uint32bool(b[152:])
+	l.AcceptRaMtu = uint32bool(b[156:])
+	l.IgnoreRoutesWithLinkdown = binary.NativeEndian.Uint32(b[160:])
+	l.UseOifAddrsOnly = uint32bool(b[164:])
+	l.DropUnicastInL2Multicast = uint32bool(b[168:])
+	l.DropUnsolicitedNa = uint32bool(b[172:])
+	l.KeepAddrOnDown = binary.NativeEndian.Uint32(b[176:])
+	l.Seg6Enabled = binary.NativeEndian.Uint32(b[180:])
+	l.Seg6RequireHmac = binary.NativeEndian.Uint32(b[184:])
+	l.EnhancedDad = uint32bool(b[188:])
+	l.AddrGenMode = binary.NativeEndian.Uint32(b[192:])
+	l.DisablePolicy = uint32bool(b[196:])
+	l.NdiscTclass = binary.NativeEndian.Uint32(b[200:])
+	l.RplSegEnabled = binary.NativeEndian.Uint32(b[204:])
+	l.Ioam6Enabled = binary.NativeEndian.Uint32(b[208:])
+	l.Ioam6Id = binary.NativeEndian.Uint32(b[212:])
+	l.Ioam6IdWide = binary.NativeEndian.Uint32(b[216:])
+	l.NdiscEvictNoCarrier = uint32bool(b[220:])
+	l.AcceptUntrackedNa = binary.NativeEndian.Uint32(b[224:])
+	l.AcceptRaMinLft = binary.NativeEndian.Uint32(b[228:])
+	l.ForceForwarding = uint32bool(b[232:])
+
+	return nil
+}
+
+// LinkInet6CacheInfo contains neighbor reachability cache information for
+// [LinkInet6].
+type LinkInet6CacheInfo struct {
+	MaxReasmLen   uint32
+	Tstamp        uint32
+	ReachableTime int32
+	RetransTime   uint32
+}
+
+// UnmarshalBinary unmarshals the [LinkInet6CacheInfo] from bytes.
+//
+// It will ignore any additional bytes it is given.
+func (l *LinkInet6CacheInfo) UnmarshalBinary(b []byte) error {
+	if len(b) < 16 {
+		return fmt.Errorf("expected at least 16 bytes, got %d", len(b))
+	}
+
+	l.MaxReasmLen = binary.NativeEndian.Uint32(b)
+	l.Tstamp = binary.NativeEndian.Uint32(b[4:])
+	l.ReachableTime = int32(binary.NativeEndian.Uint32(b[8:])) //nolint
+	l.RetransTime = binary.NativeEndian.Uint32(b[12:])
 
 	return nil
 }
@@ -546,6 +916,64 @@ func (los LinkOperState) String() string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+// LinkRpFilter configures the reverse path validation for a [Link], as defined
+// in RFC 3704.
+type LinkRpFilter uint32
+
+// Constants for [LinkRpFilter].
+const (
+	LinkRpFilterNone LinkRpFilter = iota
+	LinkRpFilterStrict
+	LinkRpFilterLoose
+)
+
+func (l LinkRpFilter) String() string {
+	switch l {
+	case LinkRpFilterNone:
+		return "NONE"
+	case LinkRpFilterStrict:
+		return "STRICT"
+	case LinkRpFilterLoose:
+		return "LOOSE"
+
+	default:
+		return "UNKNOWN"
+	}
+}
+
+// LinkSpec contains layer-3 specific addressing configuration for a [Link].
+//
+// References:
+//   - https://www.kernel.org/doc/html/next/networking/netlink_spec/rt-link.html#rt-link-attribute-set-af-spec-attrs
+type LinkSpec struct {
+	Inet  *LinkInet
+	Inet6 *LinkInet6
+}
+
+// UnmarshalAttributes unmarshals a [LinkSpec] from the IFLA_AF_SPEC attribute
+// on a [Link].
+func (l *LinkSpec) UnmarshalAttributes(attrs *netlink.AttributeReader) error {
+	for attr := range attrs.Each {
+		switch attr.Type() {
+		case unix.AF_INET:
+			l.Inet = new(LinkInet)
+			err := attr.Unmarshal(l.Inet)
+			if err != nil {
+				return fmt.Errorf("inet: %w", err)
+			}
+
+		case unix.AF_INET6:
+			l.Inet6 = new(LinkInet6)
+			err := attr.Unmarshal(l.Inet6)
+			if err != nil {
+				return fmt.Errorf("inet6: %w", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // LinkStats contains statistics for a link.
@@ -880,4 +1308,14 @@ func (x *LinkXDPAttrs) UnmarshalAttributes(attrs *netlink.AttributeReader) error
 	}
 
 	return nil
+}
+
+// uint32bool returns true if a host byteorder uint32 is non-zero.
+func uint32bool(b []byte) bool {
+	if len(b) < 4 {
+		return false
+	}
+
+	n := binary.NativeEndian.Uint32(b)
+	return n != 0
 }
