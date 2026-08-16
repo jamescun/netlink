@@ -1,0 +1,46 @@
+version: 2
+
+project_name: "netlink"
+
+before:
+  hooks:
+  - "go mod tidy"
+
+builds:
+- skip: true
+
+source:
+  enabled: true
+
+signs:
+- artifacts: "source"
+  args: [
+    "-u", "49D7876CB49C6B63F172BBAEC0BE641E841F15D5",
+    "--armor", "--output", "${signature}",
+    "--detach-sign", "${artifact}"
+    ]
+
+checksum:
+  disable: true
+
+changelog:
+  sort: "asc"
+  filters:
+    exclude:
+    - "^build:"
+    - "^ci:"
+    - "^docs:"
+    - "^test:"
+
+release:
+  draft: true
+  github:
+    token: "{{ .Env.RELEASE_GITHUB_TOKEN }}"
+  footer: |
+
+    ---
+
+    Thank you for choosing this project!
+
+    All release files are signed by [`49D7 876C B49C 6B63 F172 BBAE C0BE 641E 841F 15D5`](https://jamescun.com/key.gpg).
+    ```
