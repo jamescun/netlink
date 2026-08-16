@@ -361,7 +361,8 @@ func (ae *AttributeEncoder) Int64(attrType uint16, v int64) {
 }
 
 // Marshal marshals a nested attribute from a type implementing
-// [AttributeMarshaler].
+// [AttributeMarshaler]. The [NESTED] attribute type flag will be set
+// automatically.
 //
 // The length of the nested attributes cannot exceed a uint16, including the
 // attribute header.
@@ -377,7 +378,7 @@ func (ae *AttributeEncoder) Marshal(attrType uint16, src AttributeMarshaler) err
 
 	// append empty length to set after marshaling.
 	attrs.buf = append(attrs.buf, 0x00, 0x00)
-	attrs.buf = binary.NativeEndian.AppendUint16(attrs.buf, attrType)
+	attrs.buf = binary.NativeEndian.AppendUint16(attrs.buf, attrType|NESTED)
 
 	err := src.MarshalAttributes(attrs)
 	if err != nil {
