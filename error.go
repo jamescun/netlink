@@ -117,7 +117,7 @@ func (e *Error) UnmarshalAttributes(attrs *AttributeDecoder) error {
 // remaining bytes.
 func readErrorCode(b []byte) (code int, rest []byte, err error) {
 	if len(b) < 4 {
-		err = fmt.Errorf("needed at least 4 bytes, got %d", len(b))
+		err = fmt.Errorf("needed 4 bytes, got %d", len(b))
 		return
 	}
 
@@ -156,7 +156,6 @@ func (e *Error) UnmarshalBinary(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("error code: %w", err)
 	}
-
 	// unmarshal original message header.
 	err = e.Original.UnmarshalBinary(b)
 	if err != nil {
@@ -164,7 +163,7 @@ func (e *Error) UnmarshalBinary(b []byte) error {
 	}
 
 	if hdr.Flags&CAPPED != 0 {
-		// CAPPED flag is set, discard the original header
+		// CAPPED flag is set, discard the original header.
 		_, b, err = cutHeader(b)
 		if err != nil {
 			return fmt.Errorf("original header: %w", err)
@@ -179,11 +178,7 @@ func (e *Error) UnmarshalBinary(b []byte) error {
 
 	if hdr.Flags&ACK_TLVS != 0 {
 		// ACK_TLVS flag is set, body contains Extended ACK attributes.
-
-		attrs, err := NewAttributeDecoder(b)
-		if err != nil {
-			return fmt.Errorf("extended ack: %w", err)
-		}
+		attrs := &AttributeDecoder{buf: b}
 
 		err = attrs.Unmarshal(e)
 		if err != nil {

@@ -33,6 +33,24 @@ func TestError(t *testing.T) {
 					},
 				},
 			},
+			{
+				"testdata/errors/ext_invalid_argument",
+				&Error{
+					Code: 22,
+					Original: MessageHeader{
+						Length: 88,
+						Type:   30,
+						Flags:  REQUEST | ACK,
+						Seq:    2,
+						Pid:    554099,
+					},
+					Message: "NLA_F_NESTED is missing",
+					Offset:  28,
+					Policy: &Policy{
+						Type: PolicyTypeNestedArray,
+					},
+				},
+			},
 		}
 
 		for _, test := range tests {
