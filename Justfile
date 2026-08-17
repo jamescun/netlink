@@ -3,13 +3,30 @@ set minimum-version := "1.55.0"
 
 
 ##############################################################################
+# Source control.
+##############################################################################
+
+[group("source")]
+[doc("push a branch to both github and codeberg")]
+push branch:
+	git push github {{branch}}
+	git push codeberg {{branch}}
+
+
+[group("source")]
+[doc("tag a release version with message")]
+tag version message:
+	git tag -a {{version}} -m "{{message}}"
+
+
+##############################################################################
 # Releasing.
 ##############################################################################
 
 [group("release")]
-[doc("release the latest version to GitHub")]
-[confirm("Have you tagged and pushed to GitHub?")]
-release:
+[doc("tag and release a new version")]
+[confirm("Tags are immutable, are you sure?")]
+release version message: (tag version message) (push version)
 	goreleaser release --clean
 
 

@@ -4,16 +4,21 @@
 
 This package contains implements the Linux Kernel Netlink protocol, for interacting with the systems network stack and related subsystems.
 
+The source for this project is hosted on both [GitHub](https://github.com/jamescun/netlink) and [Codeberg](https://codeberg.org/jamescun/netlink).
+
+
 > [!WARNING]
 > This package is still **under heavy development**, it's API may change unprompted, or may behave in unexpected or destructive ways.
 >
 > **USE AT YOUR OWN RISK!**
+
 
 Guiding Principles:
 
 * Ecosystem compatibility:
   * Use interfaces defined in the Go standard library, such as [encoding.BinaryMarshaler](https://pkg.go.dev/encoding#BinaryMarshaler) and [encoding.BinaryUnmarshaler](https://pkg.go.dev/encoding#BinaryUnmarshaler).
 * No third-party dependencies or shell commands.
+
 
 ## core packages
 
@@ -45,21 +50,21 @@ It also implements a client for the Generic Netlink [Controller](https://pkg.go.
 
 ### rtnetlink
 
-[![Go Reference](https://pkg.go.dev/badge/go.jamescun.com/netlink/rtnetlink.svg)](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink)
+[![Go Reference](https://pkg.go.dev/badge/go.jamescun.com/netlink/rt.svg)](https://pkg.go.dev/go.jamescun.com/netlink/rt)
 
 ```sh
-go get -u go.jamescun.com/netlink/rtnetlink
+go get -u go.jamescun.com/netlink/rt
 ```
 
-The `rtnetlink` package is an implementation of the `rtnetlink` family, for interacting with system network interfaces, addresses and routing and network neighbors.
+The `rt` package is an implementation of the [rtnetlink](https://www.man7.org/linux/man-pages/man7/rtnetlink.7.html) family, for interacting with system network interfaces, addresses and routing and network neighbors.
 
-The client is implemented in [rtnetlink](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink), while the individual families are implemented in:
+The client is implemented in [rtnetlink](https://pkg.go.dev/go.jamescun.com/netlink/rt), while the individual families are implemented in:
 
-* [netlink/rtaddr](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtaddr)
-* [netlink/rtlink](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtlink)
-* [netlink/rtroute](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtroute)
+* [rt/rtaddr](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtaddr)
+* [rt/rtlink](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtlink)
+* [rt/rtroute](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtroute)
 
-See usage examples in the [README.md](rtnetlink/README.md).
+See usage examples in the [README.md](rt/README.md).
 
 
 ### tuntap
