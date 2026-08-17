@@ -75,7 +75,7 @@ func (c *Client) CreatePeer(deviceName string, publicKey Key, opts ...PeerOption
 		}
 	}
 
-	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, req)
+	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, 0, req)
 	if errors.Is(err, syscall.ENODEV) {
 		return ErrDeviceNotFound
 	} else if err != nil {
@@ -108,7 +108,7 @@ func (c *Client) ConfigureDevice(deviceName string, opts ...DeviceOption) error 
 		}
 	}
 
-	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, req)
+	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, 0, req)
 	if errors.Is(err, syscall.ENODEV) {
 		return ErrDeviceNotFound
 	} else if err != nil {
@@ -145,7 +145,7 @@ func (c *Client) ConfigurePeer(deviceName string, publicKey Key, opts ...PeerOpt
 		}
 	}
 
-	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, req)
+	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, 0, req)
 	if errors.Is(err, syscall.ENODEV) {
 		return ErrDeviceNotFound
 	} else if err != nil {
@@ -172,7 +172,7 @@ func (c *Client) RemovePeer(deviceName string, publicKey Key) error {
 		},
 	}
 
-	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, req)
+	err := c.genl.Do(unix.WG_CMD_SET_DEVICE, 0, req)
 	if errors.Is(err, syscall.ENODEV) {
 		return ErrDeviceNotFound
 	} else if err != nil {
@@ -189,7 +189,7 @@ func (c *Client) GetDevice(name string) (*Device, error) {
 	device := &Device{}
 
 	err := c.genl.Dump(
-		unix.WG_CMD_GET_DEVICE,
+		unix.WG_CMD_GET_DEVICE, 0,
 		netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
 			return msg.Marshal(netlink.AttributeMarshalerFunc(func(attrs *netlink.AttributeEncoder) error {
 				return attrs.String(unix.WGDEVICE_A_IFNAME, name)

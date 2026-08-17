@@ -29,41 +29,41 @@ type Client interface {
 	Seq() uint32
 
 	// Do executes a Netlink request, marshaling the request from an
-	// [Marshaler], and does not expect a response other than an [ERROR]
+	// [Marshaler], and does not expect a response other than an ERROR
 	// message type or an acknowledgement.
 	//
 	// The message will automatically have the message type configured as
-	// msgType, and have the [REQUEST] and [ACK] flags set.
+	// msgType, and have the REQUEST, ACK and any additional flags set.
 	//
-	// On non-zero [ERROR] message types, the error will be unmarshaled
+	// On non-zero ERROR message types, the error will be unmarshaled
 	// automatically and returned as an [Error] type.
-	Do(msgType uint16, src Marshaler) error
+	Do(msgType, flags uint16, src Marshaler) error
 
 	// Dump executes a Netlink request, marshaling the request from a
 	// [Marshaler], which may be nil, and unmarshaling the response(s) to an
 	// [Unmarshaler].
 	//
 	// The message will automatically have the message type configured as
-	// msgType, and have the [REQUEST] and [DUMP] flags set.
+	// msgType, and have the REQUEST, DUMP and any additional flags set.
 	//
 	// If the response contains multiple messages, dst will be unmarshaled to
 	// repeatedly until all messages have been consumed, not including the
-	// [DONE] message type.
+	// DONE message type.
 	//
-	// On non-zero [ERROR] message types, the error will be unmarshaled
+	// On non-zero ERROR message types, the error will be unmarshaled
 	// automatically and returned as an [Error] type.
-	Dump(msgType uint16, src Marshaler, dst Unmarshaler) error
+	Dump(msgType, flags uint16, src Marshaler, dst Unmarshaler) error
 
 	// Get executes a Netlink request, marshaling the request from a
 	// [Marshaler], which may be nil, and unmarshaling the response to an
 	// [Unmarshaler].
 	//
 	// The message will automatically have the message type configured as
-	// msgType, and have the [REQUEST] and [ACK] flags set.
+	// msgType, and have the REQUEST, ACK and any additional flags set.
 	//
-	// On non-zero [ERROR] message types, the error will be unmarshaled
+	// On non-zero ERROR message types, the error will be unmarshaled
 	// automatically and returned as an [Error] type.
-	Get(msgType uint16, src Marshaler, dst Unmarshaler) error
+	Get(msgType, flags uint16, src Marshaler, dst Unmarshaler) error
 }
 
 type client struct {
@@ -115,7 +115,7 @@ func (c *client) Seq() uint32 {
 	return c.seq
 }
 
-func (c *client) Do(msgType uint16, src Marshaler) error {
+func (c *client) Do(msgType, flags uint16, src Marshaler) error {
 	if src == nil {
 		return fmt.Errorf("Marshaler is nil")
 	}
@@ -124,41 +124,41 @@ func (c *client) Do(msgType uint16, src Marshaler) error {
 	defer c.mu.Unlock()
 
 	return c.do(MarshalerFunc(func(msg MessageEncoder) error {
-		msg.SetHeader(msgType, REQUEST|ACK)
+		msg.SetHeader(msgType, REQUEST|ACK|flags)
 		return src.MarshalNetlink(msg)
 	}), nil)
 }
 
-func (c *client) Dump(msgType uint16, src Marshaler, dst Unmarshaler) error {
+func (c *client) Dump(msgType, flags uint16, src Marshaler, dst Unmarshaler) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if src == nil {
 		return c.do(MessageHeader{
 			Type:  msgType,
-			Flags: REQUEST | DUMP,
+			Flags: REQUEST | DUMP | flags,
 		}, dst)
 	}
 
 	return c.do(MarshalerFunc(func(msg MessageEncoder) error {
-		msg.SetHeader(msgType, REQUEST|DUMP)
+		msg.SetHeader(msgType, REQUEST|DUMP|flags)
 		return src.MarshalNetlink(msg)
 	}), dst)
 }
 
-func (c *client) Get(msgType uint16, src Marshaler, dst Unmarshaler) error {
+func (c *client) Get(msgType, flags uint16, src Marshaler, dst Unmarshaler) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if src == nil {
 		return c.do(MessageHeader{
 			Type:  msgType,
-			Flags: REQUEST | ACK,
+			Flags: REQUEST | ACK | flags,
 		}, dst)
 	}
 
 	return c.do(MarshalerFunc(func(msg MessageEncoder) error {
-		msg.SetHeader(msgType, REQUEST|ACK)
+		msg.SetHeader(msgType, REQUEST|ACK|flags)
 		return src.MarshalNetlink(msg)
 	}), dst)
 }

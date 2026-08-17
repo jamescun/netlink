@@ -32,7 +32,7 @@ func TestClient(t *testing.T) {
 	}
 
 	err = client.Get(
-		unix.GENL_ID_CTRL,
+		unix.GENL_ID_CTRL, 0,
 		netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
 			err := msg.MarshalBytes(&genetlink.Header{
 				Cmd:     unix.CTRL_CMD_GETFAMILY,

@@ -80,7 +80,7 @@ func (c *Controller) GetFamily(name string) (*Family, error) {
 	family := &Family{}
 
 	err := c.client.Get(
-		unix.CTRL_CMD_GETFAMILY,
+		unix.CTRL_CMD_GETFAMILY, 0,
 		netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
 			err := msg.Marshal(netlink.AttributeMarshalerFunc(func(attrs *netlink.AttributeEncoder) error {
 				return attrs.String(unix.CTRL_ATTR_FAMILY_NAME, name)
@@ -108,7 +108,7 @@ func (c *Controller) ListFamilies() (Families, error) {
 	families := Families{}
 
 	err := c.client.Dump(
-		unix.CTRL_CMD_GETFAMILY,
+		unix.CTRL_CMD_GETFAMILY, 0,
 		nil,
 		&families,
 	)

@@ -38,41 +38,44 @@ type Client interface {
 	Version() uint8
 
 	// Do executes a Generic Netlink request, marshaling the request from an
-	// [Marshaler], and does not expect a response other than an [ERROR]
+	// [Marshaler], and does not expect a response other than an ERROR
 	// message type or an acknowledgement.
 	//
 	// The message will automatically have the Generic Netlink header added
-	// with the given command, and have the [REQUEST] and [ACK] flags set.
+	// with the given command, and have the REQUEST, ACK and any additional
+	// flags set.
 	//
-	// On non-zero [ERROR] message types, the error will be unmarshaled
+	// On non-zero ERROR message types, the error will be unmarshaled
 	// automatically and returned as an [Error] type.
-	Do(cmd uint8, src netlink.Marshaler) error
+	Do(cmd uint8, flags uint16, src netlink.Marshaler) error
 
 	// Dump executes a Generic Netlink request, marshaling the request from a
 	// [Marshaler], which may be nil, and unmarshaling the response(s) to an
 	// [Unmarshaler].
 	//
 	// The message will automatically have the Generic Netlink header added
-	// with the given command, and have the [REQUEST] and [DUMP] flags set.
+	// with the given command, and have the REQUEST, DUMP and any additional
+	// flags set.
 	//
 	// If the response contains multiple messages, dst will be unmarshaled to
 	// repeatedly until all messages have been consumed, not including the
-	// [DONE] message type.
+	// DONE message type.
 	//
-	// On non-zero [ERROR] message types, the error will be unmarshaled
+	// On non-zero ERROR message types, the error will be unmarshaled
 	// automatically and returned as an [Error] type.
-	Dump(cmd uint8, src netlink.Marshaler, dst netlink.Unmarshaler) error
+	Dump(cmd uint8, flags uint16, src netlink.Marshaler, dst netlink.Unmarshaler) error
 
 	// Get executes a Generic Netlink request, marshaling the request from a
 	// [Marshaler], which may be nil, and unmarshaling the response to an
 	// [Unmarshaler].
 	//
 	// The message will automatically have the Generic Netlink header added
-	// with the given command, and have the [REQUEST] and [ACK] flags set.
+	// with the given command, and have the REQUEST, ACK and any additional
+	// flags set.
 	//
-	// On non-zero [ERROR] message types, the error will be unmarshaled
+	// On non-zero ERROR message types, the error will be unmarshaled
 	// automatically and returned as an [Error] type.
-	Get(cmd uint8, src netlink.Marshaler, dst netlink.Unmarshaler) error
+	Get(cmd uint8, flags uint16, src netlink.Marshaler, dst netlink.Unmarshaler) error
 }
 
 type client struct {
@@ -126,12 +129,12 @@ func (c *client) Seq() uint32 {
 	return c.nl.Seq()
 }
 
-func (c *client) Do(cmd uint8, src netlink.Marshaler) error {
+func (c *client) Do(cmd uint8, flags uint16, src netlink.Marshaler) error {
 	if src == nil {
 		return fmt.Errorf("Marshaler is nil")
 	}
 
-	return c.nl.Do(c.family, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
+	return c.nl.Do(c.family, flags, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
 		err := msg.MarshalBytes(&Header{
 			Cmd:     cmd,
 			Version: c.version,
@@ -144,8 +147,8 @@ func (c *client) Do(cmd uint8, src netlink.Marshaler) error {
 	}))
 }
 
-func (c *client) Dump(cmd uint8, src netlink.Marshaler, dst netlink.Unmarshaler) error {
-	return c.nl.Dump(c.family, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
+func (c *client) Dump(cmd uint8, flags uint16, src netlink.Marshaler, dst netlink.Unmarshaler) error {
+	return c.nl.Dump(c.family, flags, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
 		err := msg.MarshalBytes(&Header{
 			Cmd:     cmd,
 			Version: c.version,
@@ -173,8 +176,8 @@ func (c *client) Dump(cmd uint8, src netlink.Marshaler, dst netlink.Unmarshaler)
 	}))
 }
 
-func (c *client) Get(cmd uint8, src netlink.Marshaler, dst netlink.Unmarshaler) error {
-	return c.nl.Get(c.family, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
+func (c *client) Get(cmd uint8, flags uint16, src netlink.Marshaler, dst netlink.Unmarshaler) error {
+	return c.nl.Get(c.family, flags, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
 		err := msg.MarshalBytes(&Header{
 			Cmd:     cmd,
 			Version: c.version,
