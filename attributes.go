@@ -331,6 +331,12 @@ func (ae *AttributeEncoder) Bytes(attrType uint16, b []byte) error {
 	return nil
 }
 
+// Flag marshals an attribute containing a flag, which has no body.
+func (ae *AttributeEncoder) Flag(attrType uint16) {
+	ae.buf = binary.NativeEndian.AppendUint16(ae.buf, attrHeaderLen)
+	ae.buf = binary.NativeEndian.AppendUint16(ae.buf, attrType)
+}
+
 // HardwareAddr marshals an attribute containing a [net.HardwareAddr].
 func (ae *AttributeEncoder) HardwareAddr(attrType uint16, addr net.HardwareAddr) {
 	ae.buf = binary.NativeEndian.AppendUint16(ae.buf, uint16(len(addr)+attrHeaderLen)) //nolint

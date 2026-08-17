@@ -49,6 +49,20 @@ func TestAttributeEncoder(t *testing.T) {
 		}
 	})
 
+	t.Run("Flag", func(t *testing.T) {
+		expected := []byte{
+			0x04, 0x00, 0x10, 0x00,
+		}
+
+		ae := &AttributeEncoder{}
+
+		ae.Flag(16)
+
+		if !cmp.Equal(expected, ae.buf) {
+			t.Error(cmp.Diff(expected, ae.buf))
+		}
+	})
+
 	t.Run("HardwareAddr", func(t *testing.T) {
 		mac, _ := net.ParseMAC("f6:be:74:08:82:1c")
 
