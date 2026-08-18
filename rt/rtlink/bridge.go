@@ -81,7 +81,7 @@ func (Bridge) DeviceKind() string {
 
 // MarshalAttributes marshals the IFLA_INFO_DATA attributes for a [Bridge]
 // device type.
-func (Bridge) MarshalAttributes(_ *netlink.AttributeDecoder) error {
+func (Bridge) MarshalAttributes(_ *netlink.AttributeEncoder) error {
 	return fmt.Errorf("bridge devices cannot be configured yet")
 }
 

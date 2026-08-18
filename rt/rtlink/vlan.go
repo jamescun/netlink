@@ -36,7 +36,7 @@ func (VLAN) DeviceKind() string {
 
 // MarshalAttributes marshals the IFLA_INFO_DATA attributes for a [VLAN] device
 // type.
-func (VLAN) MarshalAttributes(_ *netlink.AttributeDecoder) error {
+func (VLAN) MarshalAttributes(_ *netlink.AttributeEncoder) error {
 	return fmt.Errorf("VLAN devices cannot be configured yet")
 }
 

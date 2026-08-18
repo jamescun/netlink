@@ -64,7 +64,7 @@ func (Bond) DeviceKind() string {
 
 // MarshalAttributes marshals the IFLA_INFO_DATA attributes for a [Bond] device
 // type.
-func (Bond) MarshalAttributes(_ *netlink.AttributeDecoder) error {
+func (Bond) MarshalAttributes(_ *netlink.AttributeEncoder) error {
 	return fmt.Errorf("bond devices cannot be configured yet")
 }
 
