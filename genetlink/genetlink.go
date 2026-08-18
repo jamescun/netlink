@@ -36,6 +36,9 @@ type Header struct {
 	Reserved uint16
 }
 
+// Len returns the fixed-length of the Generic Netlink header.
+func (Header) Len() int { return 4 }
+
 // AppendBinary appends a Generic Netlink header to bytes, in the host
 // byteorder.
 func (h Header) AppendBinary(b []byte) ([]byte, error) {

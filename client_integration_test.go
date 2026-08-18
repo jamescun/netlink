@@ -62,7 +62,7 @@ func TestClient(t *testing.T) {
 			}
 
 			hdr := &genetlink.Header{}
-			err := msg.UnmarshalBytes(4, hdr)
+			err := msg.UnmarshalBytes(hdr)
 			if err != nil {
 				return err
 			}

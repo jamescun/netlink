@@ -163,7 +163,7 @@ func (c *client) Dump(cmd uint8, flags uint16, src netlink.Marshaler, dst netlin
 
 		return nil
 	}), netlink.UnmarshalerFunc(func(msg netlink.MessageDecoder) error {
-		err := msg.UnmarshalBytes(4, &Header{})
+		err := msg.UnmarshalBytes(netlink.Discard(4))
 		if err != nil {
 			return fmt.Errorf("genetlink: %w", err)
 		}
@@ -192,7 +192,7 @@ func (c *client) Get(cmd uint8, flags uint16, src netlink.Marshaler, dst netlink
 
 		return nil
 	}), netlink.UnmarshalerFunc(func(msg netlink.MessageDecoder) error {
-		err := msg.UnmarshalBytes(4, &Header{})
+		err := msg.UnmarshalBytes(netlink.Discard(4))
 		if err != nil {
 			return fmt.Errorf("genetlink: %w", err)
 		}

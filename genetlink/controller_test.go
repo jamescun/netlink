@@ -172,7 +172,7 @@ func TestFamilies(t *testing.T) {
 			}
 
 			// strip the generic netlink header.
-			err := msg.UnmarshalBytes(4, &Header{})
+			err := msg.UnmarshalBytes(netlink.Discard(4))
 			if err != nil {
 				t.Fatal("unexpected error:", err)
 			}

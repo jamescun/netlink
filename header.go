@@ -25,6 +25,9 @@ type MessageHeader struct {
 	Pid    uint32
 }
 
+// Len returns the fixed-length of [MessageHeader].
+func (MessageHeader) Len() int { return headerLen }
+
 // AppendBinary appends the Netlink message header to bytes, using the host
 // byteorder.
 //

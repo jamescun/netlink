@@ -13,6 +13,31 @@ import (
 	"io"
 )
 
+// BinaryUnmarshaler is an extension of [encoding.BinaryUnmarshaler] interface
+// to declare how many bytes are required to satisfy UnmarshalBinary method.
+//
+// It otherwise functions exactly the same.
+type BinaryUnmarshaler interface {
+	encoding.BinaryUnmarshaler
+
+	// Len returns the number of bytes needed from the message to satisfy the
+	// call to [BinaryUnmarshaler.UnmarshalBinary].
+	Len() int
+}
+
+type discard struct {
+	length int
+}
+
+// Discard returns a [BinaryUnmarshaler], for use with a [MessageDecoder] that
+// simply discards a fixed-number of bytes from a message.
+func Discard(length int) BinaryUnmarshaler {
+	return &discard{length: length}
+}
+
+func (d *discard) Len() int                       { return d.length }
+func (d *discard) UnmarshalBinary(_ []byte) error { return nil }
+
 // Message is a Netlink message, containing the header and payload.
 //
 // It is wrapped by [MessageEncoder] and [MessageDecoder] for writing and
@@ -31,7 +56,7 @@ type Message interface {
 type MessageDecoder interface {
 	Message
 
-	// Code returns the status code contained within [DONE] and [ERROR] type
+	// Code returns the status code contained within DONE and ERROR type
 	// messages.
 	//
 	// If not one of these message types, zero is returned.
@@ -50,11 +75,14 @@ type MessageDecoder interface {
 	// [MessageDecoder.UnmarshalBytes].
 	Unmarshal(AttributeUnmarshaler) error
 
-	// UnmarshalBytes marshals arbitrary bytes to the message from types
-	// implementing [encoding.BinaryMarshaler].
+	// UnmarshalBytes unmarshals arbitrary bytes from the message to a type
+	// implementing [BinaryUnmarshaler].
+	//
+	// If there are not enough bytes in the message to satisfy the read, an
+	// error is returned.
 	//
 	// Reads will not automatically be aligned, consider using [Align].
-	UnmarshalBytes(length int, dst encoding.BinaryUnmarshaler) error
+	UnmarshalBytes(BinaryUnmarshaler) error
 }
 
 type messageDecoder struct {
@@ -66,13 +94,13 @@ type messageDecoder struct {
 }
 
 // NewMessageDecoder unmarshals a single Netlink message from bytes, returning
-// a [MessageDecoder] for reading it's contents, including [ERROR] and [DONE]
+// a [MessageDecoder] for reading it's contents, including ERROR and DONE
 // message types.
 //
-// If a [DONE] or [ERROR] message type, the status code will be read and
-// available with [MessageDecoder.Code].
+// If a DONE or ERROR message type, the status code will be read and returned
+// by [MessageDecoder.Code].
 //
-// If an [ERROR] message type, it will automatically be unmarshaled to the
+// If an ERROR message type, it will automatically be unmarshaled to the
 // [Error] type and returned. The caller must check if the status code is zero
 // to check for acknowledgement messages, either by checking the code directly
 // or using the [IsACK] function.
@@ -149,9 +177,14 @@ func (md *messageDecoder) Unmarshal(dst AttributeUnmarshaler) error {
 	return nil
 }
 
-func (md *messageDecoder) UnmarshalBytes(length int, dst encoding.BinaryUnmarshaler) error {
+func (md *messageDecoder) UnmarshalBytes(dst BinaryUnmarshaler) error {
 	if dst == nil {
-		return fmt.Errorf("encoding.BinaryUnmarshaler is nil")
+		return fmt.Errorf("BinaryUnmarshaler is nil")
+	}
+
+	length := dst.Len()
+	if length < 0 {
+		return fmt.Errorf("cannot read negative bytes, got %d", length)
 	}
 
 	if (md.i + length) >= len(md.buf) {
