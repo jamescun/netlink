@@ -17,24 +17,27 @@ import (
 )
 
 var (
-	// ErrLinkNotFound is returned by [Client] when attempting to get or
+	// ErrLinkNotFound is returned by [LinkClient] when attempting to get or
 	// configure a [Link] by index or name but it does not exist.
 	ErrLinkNotFound = errors.New("link not found")
 
-	// ErrLinkExists is returned by [Client] when attempting to create a [Link]
-	// but it already exists.
+	// ErrLinkExists is returned by [LinkClient] when attempting to create a
+	// [Link] but it already exists.
 	ErrLinkExists = errors.New("link exists")
 )
 
-// Client implements the portion of an rtnetlink client for handling link
+// LinkClient implements the portion of an rtnetlink client for handling link
 // configuration.
-type Client struct {
+type LinkClient struct {
 	nl netlink.Client
 }
 
-// New initializes a [Client] for the subset of rtnetlink for exchanging
+// New initializes a [LinkClient] for the subset of rtnetlink for exchanging
 // messages for [Link].
-func New() (*Client, error) {
+//
+// This client focuses only on the rtlink subsystem, for all subsystems,
+// consider using [rt.Client].
+func New() (*LinkClient, error) {
 	nl, err := netlink.NewClient(netlink.ROUTE, netlink.ExtendedACK(), netlink.Strict())
 	if err != nil {
 		return nil, err
@@ -43,15 +46,15 @@ func New() (*Client, error) {
 	return From(nl), nil
 }
 
-// From initializes a [Client] from an existing [netlink.Client].
+// From initializes a [LinkClient] from an existing [netlink.Client].
 //
 // It MUST be configured for the [netlink.ROUTE] family.
-func From(nl netlink.Client) *Client {
-	return &Client{nl: nl}
+func From(nl netlink.Client) *LinkClient {
+	return &LinkClient{nl: nl}
 }
 
 // Close the client and underlying socket.
-func (c *Client) Close() error {
+func (c *LinkClient) Close() error {
 	return c.nl.Close()
 }
 
@@ -61,7 +64,7 @@ func (c *Client) Close() error {
 // those configuration options.
 //
 // If the link does not exist, [ErrLinkNotFound] is returned.
-func (c *Client) ConfigureLink(index int, opts ...LinkOption) error {
+func (c *LinkClient) ConfigureLink(index int, opts ...LinkOption) error {
 	req := &configureLink{
 		info: IfInfoMsg{
 			Index: index,
@@ -95,7 +98,7 @@ func (c *Client) ConfigureLink(index int, opts ...LinkOption) error {
 // driver name.
 //
 // If the link already exists, [ErrLinkExists] is returned.
-func (c *Client) CreateLink(name string, device Device, opts ...LinkOption) error {
+func (c *LinkClient) CreateLink(name string, device Device, opts ...LinkOption) error {
 	if name == "" {
 		return fmt.Errorf("name is required")
 	} else if len(name) > 15 {
@@ -134,7 +137,7 @@ func (c *Client) CreateLink(name string, device Device, opts ...LinkOption) erro
 // GetLinkByIndex retrieves a [Link] by it's index.
 //
 // If the link does not exist, [ErrLinkNotFound] is returned.
-func (c *Client) GetLinkByIndex(index int) (*Link, error) {
+func (c *LinkClient) GetLinkByIndex(index int) (*Link, error) {
 	link := &Link{}
 
 	err := c.nl.Get(unix.RTM_GETLINK, 0, &IfInfoMsg{Index: index}, link)
@@ -150,7 +153,7 @@ func (c *Client) GetLinkByIndex(index int) (*Link, error) {
 // GetLinkByName retrieves a [Link] by it's name.
 //
 // If the link does not exist, [ErrLinkNotFound] is returned.
-func (c *Client) GetLinkByName(name string) (*Link, error) {
+func (c *LinkClient) GetLinkByName(name string) (*Link, error) {
 	link := &Link{}
 
 	err := c.nl.Get(unix.RTM_GETLINK, 0, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
@@ -179,7 +182,7 @@ func (c *Client) GetLinkByName(name string) (*Link, error) {
 
 // ListLinks retrieves a list of [Link], optionally filtered by family and
 // some attribute types (that may be expensive to retrieve)
-func (c *Client) ListLinks(family Family, filter Filter) (Links, error) {
+func (c *LinkClient) ListLinks(family Family, filter Filter) (Links, error) {
 	links := Links{}
 
 	err := c.nl.Dump(unix.RTM_GETLINK, 0, netlink.MarshalerFunc(func(msg netlink.MessageEncoder) error {
@@ -210,7 +213,7 @@ func (c *Client) ListLinks(family Family, filter Filter) (Links, error) {
 // RemoveLink removes a [Link] by it's index.
 //
 // If the link does not exist, [ErrLinkNotFound] is returned.
-func (c *Client) RemoveLink(index int) error {
+func (c *LinkClient) RemoveLink(index int) error {
 	err := c.nl.Do(unix.RTM_DELLINK, 0, &IfInfoMsg{Index: index})
 	if errors.Is(err, syscall.ENODEV) {
 		return ErrLinkNotFound

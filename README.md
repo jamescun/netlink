@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/go.jamescun.com/netlink.svg)](https://pkg.go.dev/go.jamescun.com/netlink)
 
-This package contains implements the Linux Kernel Netlink protocol, for interacting with the systems network stack and related subsystems.
+This package implements the Linux Kernel Netlink protocol, for interacting with the systems network stack and related subsystems.
 
 The source for this project is hosted on both [GitHub](https://github.com/jamescun/netlink) and [Codeberg](https://codeberg.org/jamescun/netlink).
 
@@ -58,11 +58,11 @@ go get -u go.jamescun.com/netlink/rt
 
 The `rt` package is an implementation of the [rtnetlink](https://www.man7.org/linux/man-pages/man7/rtnetlink.7.html) family, for interacting with system network interfaces, addresses and routing and network neighbors.
 
-The client is implemented in [rtnetlink](https://pkg.go.dev/go.jamescun.com/netlink/rt), while the individual families are implemented in:
+The client is implemented in [rt](https://pkg.go.dev/go.jamescun.com/netlink/rt), while the individual families are implemented in:
 
-* [rt/rtaddr](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtaddr)
-* [rt/rtlink](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtlink)
-* [rt/rtroute](https://pkg.go.dev/go.jamescun.com/netlink/rtnetlink/rtroute)
+* [rt/rtaddr](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtaddr)
+* [rt/rtlink](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtlink)
+* [rt/rtroute](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtroute)
 
 See usage examples in the [README.md](rt/README.md).
 

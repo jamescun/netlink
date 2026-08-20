@@ -8,11 +8,11 @@ go get -u go.jamescun.com/netlink/rtnetlink
 
 The `rt` package is an implementation of the rtnetlink family, for interacting with system network interfaces, addresses and routing and network neighbors.
 
-The client is implemented in [rtnetlink](https://pkg.go.dev/go.jamescun.com/netlink/rt), while the individual families are implemented in:
+The client is implemented in [rt](https://pkg.go.dev/go.jamescun.com/netlink/rt), while the individual families are implemented in:
 
-* [netlink/rt/rtaddr](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtaddr)
-* [netlink/rt/rtlink](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtlink)
-* [netlink/rt/rtroute](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtroute)
+* [rt/rtaddr](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtaddr)
+* [rt/rtlink](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtlink)
+* [rt/rtroute](https://pkg.go.dev/go.jamescun.com/netlink/rt/rtroute)
 
 
 ## Examples
@@ -31,11 +31,12 @@ package main
 import (
 	"fmt"
 
+	"go.jamescun.com/netlink/rt"
 	"go.jamescun.com/netlink/rt/rtlink"
 )
 
 func main() {
-	client, _ := rtlink.New()
+	client, _ := rt.New()
 
 	// get a list of links for all families (including IPv4 and IPv6),
 	// filtering expensive attributes such as Virtual Functions and Statistics.
@@ -54,13 +55,14 @@ func main() {
 package main
 
 import (
+	"go.jamescun.com/netlink/rt"
 	"go.jamescun.com/netlink/rt/rtlink"
 )
 
 func main() {
-	client, _ := rtlink.New()
+	client, _ := rt.New()
 
-	// create a new Wireguard link called `wg0` with an MTU of 1420, and bring
+	// create a new Wireguard link called wg0 with an MTU of 1420, and bring
 	// the interface up.
 	client.CreateLink(
 		"wg0",
@@ -78,13 +80,45 @@ func main() {
 package main
 
 import (
+	"go.jamescun.com/netlink/rt"
 	"go.jamescun.com/netlink/rt/rtlink"
 )
 
 func main() {
-	client, _ := rtlink.New()
+	client, _ := rt.New()
 
-	// configure the `wg0` link to up.
-	client.ConfigureLink("wg0", rtlink.Up)
+	// get the index of the link named wg0.
+	link, _ := client.GetLinkByName("wg0")
+
+	// configure the wg0 link to up.
+	client.ConfigureLink(link.Index, rtlink.Up)
+}
+```
+
+
+### Add an address to a link
+
+```go
+package main
+
+import (
+	"net/netip"
+
+	"go.jamescun.com/netlink/rt"
+	"go.jamescun.com/netlink/rt/rtaddr"
+)
+
+func main() {
+	client, _ := rt.New()
+
+	// get the index of the link named wg0.
+	link, _ := client.GetLinkByName("wg0")
+
+	// add the address 100.64.0.1/24 to wg0.
+	client.CreateAddr(
+		link.Index,
+		rtaddr.PERMANENT,
+		rtaddr.Local(netip.MustParsePrefix("100.64.0.1/24")),
+	)
 }
 ```
