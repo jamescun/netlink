@@ -9,7 +9,7 @@ set minimum-version := "1.55.0"
 [group("source")]
 [doc("push a branch to both github and codeberg")]
 push branch:
-	git push github {{branch}}
+	git push origin {{branch}}
 	git push codeberg {{branch}}
 
 
